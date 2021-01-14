@@ -1,94 +1,138 @@
+import vs from './vertex-shader.js';
+import fs from './fragment-shader.js';
+
 class Carousel {
-    constructor({ imagePrefix, numImages }) {
-        this.itemClassName = 'carousel-item';
-        this.items = [];
-        this.itemsSize = numImages;
-        this.slide = 0;
-        this.isTransitioning = false;
+    constructor({} = {}) {
+        // setup variables
+        this.initVariables();
+        // setupScene
+        this.setup();
+    }
+    setup() {
+        // wait for everything to be ready
+        window.addEventListener('load', () => this.setupScene());
+    }
+    destroy(curtains) {
+        curtains.dispose()
+    }
+    initVariables() {
+        // get the plane element
+        this.planeElements = document.getElementsByClassName('plane') || [];
+        // set the number of textures
+        this.maxTextures = this.planeElements[0].getElementsByClassName('carousel-item').length - 1 || [];
+        this.activeTextureIndex = 0;
+        this.nextTextureIndex = 1;
+        this.isChanging = false;
+        this.transitionTimer = 0;
+    }
+    setupScene() {
+        this.initVariables()
 
-        const containerRef = document.getElementById('carousel');
+        // set up our WebGL context and append the canvas to our wrapper
+        const curtains = new Curtains({
+            container: document.getElementById('carousel'),
+            watchScroll: false, // no need to listen for the scroll in this example
+            pixelRatio: Math.min(1.5, window.devicePixelRatio) // limit pixel ratio for performance
+        });
 
-        // add buttons
-        const nextButton = document.createElement('div');
-        nextButton.className = 'carousel-btn-next';
-        containerRef.appendChild(nextButton);
+        // handle errors
+        curtains
+            .onError((error) => this.handleCurtainsErrors(error))
+            .onContextLost(() => this.handleCurtainsContextLost(curtains));
 
-        // add slides
-        for (let i = 0; i < numImages; i++) {
-            // create div
-            const slide = document.createElement('div');
-            // add className
-            slide.className = this.itemClassName
-            // add image as background
-            slide.style.backgroundImage = `url('./${imagePrefix}${i}.jpg')`;
-            // add slide to carousel
-            containerRef.appendChild(slide);
-            this.items.push(slide)
+        // temp disable drawing
+        curtains.disableDrawing();
+
+        // plane parameters
+        const params = {
+            vertexShader: vs,
+            fragmentShader: fs,
+            uniforms: {
+                time: {
+                    name: "uTime",
+                    type: "1f",
+                    value: 0,
+                },
+                pi: {
+                    name: "PI",
+                    type: "1f",
+                    value: Math.PI,
+                },
+            },
+        };
+
+        // init plane
+        const carouselPlane = new Plane(curtains, this.planeElements[0], params);
+
+        // assign active texture
+        const activeTex = carouselPlane.textures[this.activeTextureIndex];
+        activeTex._samplerName = 'activeTex'
+
+        // assign next texture
+        const nextTex = carouselPlane.textures[this.nextTextureIndex];
+        nextTex._samplerName = 'nextTex'
+
+        carouselPlane.onLoading((texture) => {
+            // improve texture rendering on small screens with LINEAR_MIPMAP_NEAREST minFilter
+            texture.setMinFilter(curtains.gl.LINEAR_MIPMAP_NEAREST);
+        }).onReady(() => {
+            // add listener for click on plane
+            this.planeElements[0].addEventListener(
+                "click",
+                () => this.handleTransition(curtains, carouselPlane, nextTex, activeTex)
+            );
+
+        }).onRender(() => this.handleIncrement(carouselPlane));
+    }
+    handleCurtainsErrors(error) {
+        alert(`There was an error: ${error}`);
+    }
+    handleCurtainsContextLost(curtains) {
+        curtains.restoreContext();
+    }
+    handleIncrement(carouselPlane) {
+        // increase the carousel's transition timer
+        if (this.isChanging) {
+            this.transitionTimer += 0.02;
         }
 
-        // set initial state (assume min of 3 images)
-        this.items[0].className += ' active';
-        this.items[1].className += ' next';
-        this.items[numImages - 1].className += ' prev';
-
-        this.setEventListeners();
+        // update our time uniform
+        carouselPlane.uniforms.time.value = this.transitionTimer;
     }
-    setEventListeners() {
-        const next = document.getElementsByClassName('carousel-btn-next')[0];
-        next.addEventListener('click', this.nextSlide.bind(this));
-    }
-    disableCarousel() {
-        this.isTransitioning = true;
-        setTimeout(() => {
-            this.isTransitioning = false;
-        }, 2100);
-    }
-    jsMod(x, y) {
-        return ((x % y) + y) % y;
-    }
-    transitionTo(slideToTransition) {
-        if (this.isTransitioning) return;
+    handleTransition(curtains, carouselPlane, nextTex, activeTex) {
+        if(!this.isChanging) {
+            console.log('click');
+            // enable drawing for now
+            curtains.enableDrawing();
 
-        this.disableCarousel();
+            this.isChanging = true;
 
-        // Reset old next/prev elements to default classes
-        const oldClasses = [
-            ...document.querySelectorAll('.carousel-item.prev'),
-            ...document.querySelectorAll('.carousel-item.next'),
-        ]
-        oldClasses.forEach(item => item.className = this.itemClassName)
+            // check what will be next image
+            if(this.activeTextureIndex < this.maxTextures) {
+                this.nextTextureIndex = this.activeTextureIndex + 1;
+            }
+            else {
+                this.nextTextureIndex = 0;
+            }
 
+            // apply it to the next texture
+            nextTex.setSource(carouselPlane.images[this.nextTextureIndex]);
 
-        // Set new classes
-        this.items[this.jsMod(slideToTransition - 1, this.itemsSize)].className = this.itemClassName + ' prev';
-        this.items[slideToTransition].className = this.itemClassName + ' active';
-        this.items[this.jsMod(slideToTransition + 1, this.itemsSize)].className = this.itemClassName + ' next';
-    }
-    nextSlide() {
-        if (this.isTransitioning) return;
+            setTimeout(() => {
+                // disable drawing now that the transition is over
+                curtains.disableDrawing();
 
-        // compute next slide
-        const newSlide = this.jsMod(this.slide + 1, this.itemsSize);
+                this.isChanging = false;
+                this.activeTextureIndex = this.nextTextureIndex;
+                // the next texture becomes the active texture
+                activeTex.setSource(carouselPlane.images[this.activeTextureIndex]);
+                // reset timer
+                this.transitionTimer = 0;
 
-        this.transitionTo(newSlide);
-        this.slide = newSlide;
-    }
-    prevSlide() {
-        if (this.isTransitioning) return;
-
-        //compute prev slide
-        const newSlide = this.jsMod(this.slide - 1, this.itemsSize);
-
-        this.transitionTo(newSlide);
-        this.slide = newSlide;
+            }, 2500); // add a bit of margin to the timer
+        }
     }
 }
 
-const options = {
-    imagePrefix: 'assets/img-',
-    numImages: 3,
-}
-
-let carousel;
-carousel = new Carousel(options);
+export default Carousel;
 
