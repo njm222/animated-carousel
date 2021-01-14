@@ -8,9 +8,9 @@ attribute vec2 aTextureCoord;
 uniform mat4 uMVMatrix;
 uniform mat4 uPMatrix;
 
-// varyings : notice we've got 3 texture coords varyings
-// one for our visible texture
-// and one for the upcoming texture
+// varyings
+// one for our active texture
+// and one for the next texture
 varying vec3 vVertexPosition;
 varying vec2 vTextureCoord;
 varying vec2 vActiveTextureCoord;

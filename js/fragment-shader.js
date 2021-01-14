@@ -10,7 +10,7 @@ varying vec2 vNextTextureCoord;
 uniform float uTime;
 uniform float PI;
 
-// our textures samplers
+// the texture samplers
 uniform sampler2D activeTex;
 uniform sampler2D nextTex;
 

@@ -95,19 +95,18 @@ class Carousel {
         if (this.isChanging) {
             this.transitionTimer += 0.02;
         }
-
         // update our time uniform
         carouselPlane.uniforms.time.value = this.transitionTimer;
     }
     handleTransition(curtains, carouselPlane, nextTex, activeTex) {
         if(!this.isChanging) {
             console.log('click');
-            // enable drawing for now
+            // enable drawing temporarily
             curtains.enableDrawing();
 
             this.isChanging = true;
 
-            // check what will be next image
+            // check what the next image will be
             if(this.activeTextureIndex < this.maxTextures) {
                 this.nextTextureIndex = this.activeTextureIndex + 1;
             }
@@ -119,7 +118,7 @@ class Carousel {
             nextTex.setSource(carouselPlane.images[this.nextTextureIndex]);
 
             setTimeout(() => {
-                // disable drawing now that the transition is over
+                // disable drawing now, the transition is over
                 curtains.disableDrawing();
 
                 this.isChanging = false;
@@ -129,7 +128,7 @@ class Carousel {
                 // reset timer
                 this.transitionTimer = 0;
 
-            }, 2500); // add a bit of margin to the timer
+            }, 2100); // add a bit of margin to the timer
         }
     }
 }
